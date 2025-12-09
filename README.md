@@ -165,3 +165,22 @@ Write **8–12 lines** describing how you would implement a Stripe Checkout flow
 3. Share the link.
 
 Good luck.
+
+
+## Stripe Answer
+
+1. Create backend endpoint `/create-checkout-session` accepting application_id and amount.
+2. Create a `payment_requests` row with `application_id`, amount, currency, status='pending' and store `checkout_session_id` when Checkout session is created.
+3. Call `stripe.checkout.sessions.create()` with `metadata: { application_id, payment_request_id }` and return `session.url` to frontend.
+4. Frontend redirects user to the Checkout `session.url`.
+5. Configure a webhook endpoint `POST /webhooks/stripe` and verify signature using Stripe's `constructEvent`.
+6. On `checkout.session.completed` or `payment_intent.succeeded` update `payment_requests.status='paid'`, store `payment_intent_id`, and record receipt.
+7. Update `applications` row: set `payment_status='paid'` and advance application `stage` (e.g., 'fee-paid'), add timeline entry.
+8. Use idempotency keys and verify webhook retries to avoid double-processing.
+
+ASSUMPTIONS & NOTES
+- JWT contains user_id, tenant_id, role via request.jwt.claims (Supabase default).
+- tenant_id is used to scope records (multi-tenant).
+- tasks.status values: 'open' | 'completed'.
+- Edge Function runs with SERVICE_ROLE key; keep this secret.
+- I added a pg_notify trigger so Realtime subscribers can listen to 'task.created'.
